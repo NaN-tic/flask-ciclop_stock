@@ -11,6 +11,7 @@ ShipmentOut = tryton.pool.get('stock.shipment.out')
 ShipmentOutReturn = tryton.pool.get('stock.shipment.out.return')
 ShipmentIn = tryton.pool.get('stock.shipment.in')
 ShipmentInReturn = tryton.pool.get('stock.shipment.in.return')
+Product = tryton.pool.get('product.product')
 
 OUT_FIELDS =['code', 'rec_name', 'customer.rec_name', 'delivery_address.full_address', 'state']
 IN_FIELDS =['code', 'rec_name', 'supplier.rec_name', 'contact_address.full_address', 'state']
@@ -194,4 +195,31 @@ def shipment_out(lang, id):
     return render_template('shipment-out.html',
             breadcrumbs=breadcrumbs,
             shipment=shipment,
+            )
+
+@stock.route("/product/", endpoint="product")
+@login_required
+@tryton.transaction()
+def product(lang):
+    '''Product'''
+    product = None
+    q = request.args.get('q')
+
+    if q:
+        products = Product.search([
+            ('rec_name', '=', q),
+            ], limit=1)
+        if products:
+            product, = products
+
+    #breadcumbs
+    breadcrumbs = [{
+        'slug': url_for('.product', lang=g.language),
+        'name': _('Product'),
+        }]
+
+    return render_template('stock-product.html',
+            breadcrumbs=breadcrumbs,
+            product=product,
+            q=q,
             )

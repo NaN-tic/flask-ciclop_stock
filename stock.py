@@ -4,6 +4,8 @@ from ciclop.tryton import tryton
 from ciclop.helpers import login_required
 from ciclop.api import api
 from flask.ext.babel import gettext as _
+from trytond.transaction import Transaction
+import datetime
 
 stock = Blueprint('stock', __name__, template_folder='templates')
 
@@ -12,6 +14,7 @@ ShipmentOutReturn = tryton.pool.get('stock.shipment.out.return')
 ShipmentIn = tryton.pool.get('stock.shipment.in')
 ShipmentInReturn = tryton.pool.get('stock.shipment.in.return')
 Product = tryton.pool.get('product.product')
+Date = tryton.pool.get('ir.date')
 
 OUT_FIELDS =['code', 'rec_name', 'customer.rec_name', 'delivery_address.full_address', 'state']
 IN_FIELDS =['code', 'rec_name', 'supplier.rec_name', 'contact_address.full_address', 'state']
@@ -203,14 +206,39 @@ def shipment_out(lang, id):
 def product(lang):
     '''Product'''
     product = None
+    qty_by_location = {}
+    forecast_by_location = {}
     q = request.args.get('q')
 
     if q:
+        today = Date.today()
+
         products = Product.search([
             ('rec_name', '=', q),
             ], limit=1)
         if products:
             product, = products
+
+            locations_ids = [l.location.id for l in product.locations]
+            products = [product.id]
+
+            context = {
+                'stock_date_start': today,
+                'product': product.id,
+                }
+            context['forecast'] = False
+            context['stock_date_end'] = today
+            with Transaction().set_context(**context):
+                qty_by_location = Product.products_by_location(
+                    locations_ids, products)
+
+            context['forecast'] = True
+            context['stock_date_end'] = datetime.date.max
+            with Transaction().set_context(**context):
+                forecast_by_location = Product.products_by_location(
+                    locations_ids, products)
+            print qty_by_location
+            print forecast_by_location
 
     #breadcumbs
     breadcrumbs = [{
@@ -221,5 +249,7 @@ def product(lang):
     return render_template('stock-product.html',
             breadcrumbs=breadcrumbs,
             product=product,
+            qty_by_location=qty_by_location,
+            forecast_by_location=forecast_by_location,
             q=q,
             )

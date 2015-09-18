@@ -223,7 +223,6 @@ def product(lang):
             products = [product.id]
 
             context = {
-                'stock_date_start': today,
                 'product': product.id,
                 }
             context['forecast'] = False

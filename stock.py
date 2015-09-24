@@ -5,10 +5,10 @@ from ciclop.helpers import login_required
 from ciclop.api import api
 from flask.ext.babel import gettext as _
 from trytond.transaction import Transaction
-import datetime
 
 stock = Blueprint('stock', __name__, template_folder='templates')
 
+Location = tryton.pool.get('stock.location')
 ShipmentOut = tryton.pool.get('stock.shipment.out')
 ShipmentOutReturn = tryton.pool.get('stock.shipment.out.return')
 ShipmentIn = tryton.pool.get('stock.shipment.in')
@@ -206,8 +206,7 @@ def shipment_out(lang, id):
 def product(lang):
     '''Product'''
     product = None
-    qty_by_location = {}
-    forecast_by_location = {}
+    qty_by_location = []
     q = request.args.get('q')
 
     if q:
@@ -219,7 +218,13 @@ def product(lang):
         if products:
             product, = products
 
-            locations_ids = [l.location.id for l in product.locations]
+            locations = Location.search([
+                ('type', 'in', ['warehouse', 'storage']),
+                ('parent.type', 'not in', [
+                    'supplier','customer', 'lost_found', 'warehouse',
+                    'production', 'view']),
+                ])
+            locations_ids = [l.id for l in locations]
             products = [product.id]
 
             context = {
@@ -228,16 +233,27 @@ def product(lang):
             context['forecast'] = False
             context['stock_date_end'] = today
             with Transaction().set_context(**context):
-                qty_by_location = Product.products_by_location(
-                    locations_ids, products)
+                qbl = Product.products_by_location(
+                    locations_ids, products, with_childs=False)
+            for l in locations:
+                qty = qbl.get((l.id, product.id), 0)
+                if qty < 1:
+                    continue
 
-            context['forecast'] = True
-            context['stock_date_end'] = datetime.date.max
-            with Transaction().set_context(**context):
-                forecast_by_location = Product.products_by_location(
-                    locations_ids, products)
-            print qty_by_location
-            print forecast_by_location
+                full_name = []
+                loc = l
+                while loc:
+                    if not loc.parent:
+                        full_name.append(loc.name)
+                        break
+                    full_name.append(loc.name)
+                    loc = loc.parent
+
+                qty_by_location.append({
+                    'full_name': " / ".join(full_name[::-1]),
+                    'location': l,
+                    'quantity': qty,
+                    })
 
     #breadcumbs
     breadcrumbs = [{
@@ -249,6 +265,5 @@ def product(lang):
             breadcrumbs=breadcrumbs,
             product=product,
             qty_by_location=qty_by_location,
-            forecast_by_location=forecast_by_location,
             q=q,
             )

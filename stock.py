@@ -1,15 +1,18 @@
 from flask import Blueprint, render_template, current_app, abort, g, url_for, \
-    session, request, jsonify
+    session, request, jsonify, send_file
 from ciclop.tryton import tryton
+from ciclop.utils import slugify
 from ciclop.helpers import login_required
 from ciclop.api import api
 from flask.ext.babel import gettext as _
 from trytond.transaction import Transaction
+import tempfile
 
 stock = Blueprint('stock', __name__, template_folder='templates')
 
 Location = tryton.pool.get('stock.location')
 ShipmentOut = tryton.pool.get('stock.shipment.out')
+DeliveryNote = tryton.pool.get('stock.shipment.out.delivery_note', type='report')
 ShipmentOutReturn = tryton.pool.get('stock.shipment.out.return')
 ShipmentIn = tryton.pool.get('stock.shipment.in')
 ShipmentInReturn = tryton.pool.get('stock.shipment.in.return')
@@ -199,6 +202,31 @@ def shipment_out(lang, id):
             breadcrumbs=breadcrumbs,
             shipment=shipment,
             )
+
+@stock.route("/out/print/<int:id>", endpoint="shipment-out-print")
+@login_required
+@tryton.transaction()
+def shipment_out_print(lang, id):
+    '''Customer Shipment Print'''
+    shipments = ShipmentOut.search([
+        ('id', '=', id),
+        ], limit=1)
+    if not shipments:
+        abort(404)
+    
+    shipment, = shipments
+
+    _, report, _, _ = DeliveryNote.execute([shipment.id], {})
+    report_name = 'delivery-note-%s.pdf' % (slugify(shipment.code) or 'customer')
+
+    with tempfile.NamedTemporaryFile(
+            prefix='%s-' % current_app.config['TRYTON_DATABASE'],
+            suffix='.pdf', delete=False) as temp:
+        temp.write(report)
+    temp.close()
+    data = open(temp.name, 'rb')
+
+    return send_file(data, attachment_filename=report_name, as_attachment=True)
 
 @stock.route("/product/", endpoint="product")
 @login_required

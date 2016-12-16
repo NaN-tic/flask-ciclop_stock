@@ -4,7 +4,7 @@ from ciclop.tryton import tryton
 from ciclop.utils import slugify
 from ciclop.helpers import login_required
 from ciclop.api import api
-from flask.ext.babel import gettext as _
+from flask_babel import gettext as _
 from trytond.transaction import Transaction
 import tempfile
 
